@@ -1,0 +1,182 @@
+-----------------------------Implementando o produtor
+
+----AQUI CONFIGURAÇÃO DO KAFKA
+    @Value(value = "${spring.kafka.bootstrap-servers:localhost:9092}")
+    private String bootstrapAddress;
+
+    @Bean
+    public ProducerFactory<String, PixDTO> producerFactory() {
+        Map<String, Object> configProps = new HashMap<>();
+        configProps.put(
+                ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
+                bootstrapAddress);
+        configProps.put(
+                ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
+                StringSerializer.class);
+        configProps.put(
+                ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
+                JsonSerializer.class);
+        return new DefaultKafkaProducerFactory<>(configProps);
+    }
+
+    @Bean
+    public KafkaTemplate<String, PixDTO> kafkaTemplate() {
+        return new KafkaTemplate<>(producerFactory());
+    }
+
+  @Value(value = "${spring.kafka.bootstrap-servers:localhost:9092}")
+    private String bootstrapAddress;
+
+    AQUI PARA MOSTRA DE ONDE VAI ACESSAR KAFKA QUE NO CASO SO LOCALHOST NA PORTA 9092
+
+
+      @Bean
+        public ProducerFactory<String, PixDTO> producerFactory() {
+            Map<String, Object> configProps = new HashMap<>();
+            configProps.put(
+                    ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
+                    bootstrapAddress);
+            configProps.put(
+                    ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
+                    StringSerializer.class);
+            configProps.put(
+                    ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
+                    JsonSerializer.class);
+            return new DefaultKafkaProducerFactory<>(configProps);
+        }
+        AQUI CONFIGURAÇÃO DO KAFKA
+        SERVE QUE VAI ACESSAR CONFIGURAÇÃO
+        COMO VAI SERIALIZAR E DESREALIZAR
+        POR ONDE E COMO VAI SER ESSA SERIALIZAÇÃO
+        VAI MANDAR CHAVE EM FORMA DE STRING E TIPO QUE VAI SER ENVIADO PIXDTO
+
+
+          @Bean
+            public KafkaTemplate<String, PixDTO> kafkaTemplate() {
+                return new KafkaTemplate<>(producerFactory());
+            }
+
+        AQUI VAI PASSAR TODA CONFIGURAÇÃO ENVIAR MENSAGEM E COMO VAI SER ENVIADA
+
+-----------------COMO IMPLEMENTAR
+  @Autowired
+    private final KafkaTemplate<String, PixDTO>  kafkaTemplate;
+
+    public PixDTO salvarPix(PixDTO pixDTO) {
+        pixRepository.save(Pix.toEntity(pixDTO));
+        kafkaTemplate.send("pix-topic", pixDTO.getIdentifier(), pixDTO);
+        return pixDTO;
+    }
+    AQUI IMPLEMENTA IGUAL PRATICAMENTE TODOS CLASS SPRING BOOT
+    COMO METODO SEND ENVIA, MOSTRANDO QUAL TOPIC, CHAVE, E VALOR AI VAI ENVIAR
+
+
+-------------------------Implementando o consumidor
+TEM AS CONFIGURAÇÃO MOSTRADAS ANTERIOMENTE MAS TBM, PARA CASO ENVIE MAS MENSAGEM PARA OUTROS LUGARES ETC
+    @Bean
+    public ConsumerFactory<String, PixDTO> consumerFactory() {
+        Map<String, Object> props = new HashMap<>();
+        props.put(
+                ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
+                bootstrapAddress);
+        props.put(
+                ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
+                StringDeserializer.class);
+        props.put(
+                ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
+                JsonDeserializer.class);
+        props.put(
+                JsonDeserializer.TRUSTED_PACKAGES,
+                "*");
+        return new DefaultKafkaConsumerFactory<>(props);
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, PixDTO>
+        kafkaListenerContainerFactory() {
+
+        ConcurrentKafkaListenerContainerFactory<String, PixDTO> factory =
+                new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(consumerFactory());
+        return factory;
+    }
+
+-----------------------CONFIG
+        @Bean
+        public ConsumerFactory<String, PixDTO> consumerFactory() {
+            Map<String, Object> props = new HashMap<>();
+            props.put(
+                    ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
+                    bootstrapAddress);
+            props.put(
+                    ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
+                    StringDeserializer.class);
+            props.put(
+                    ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
+                    JsonDeserializer.class);
+            props.put(
+                    JsonDeserializer.TRUSTED_PACKAGES,
+                    "*");
+            return new DefaultKafkaConsumerFactory<>(props);
+        }
+ ONDE VAI PEGAR O KAFKA ONDE ESTA LOCALIZADO COMO SEMPRE NOSSO ESTA NO LOCALHOST 9092
+ MAS DIFERENÇA DESTES É QUE INVES DE SERIALIZAR ESSE DESEIALIZA
+ COMO VAI DESERIALIZAR A KEY(CHAVE)
+ COMO VAI DESERIALIZAR A MENSAGEM EM SI QUE PIXDTO
+ E POR FIM
+ AQUI ISSO MOSTRA PARA DESERIALIZAR EM PACOTE QUE VERSÃO SPING CONFIA
+ COM O "*"  CONFIAMOS EM TODOS E PODEMOS ESPECIFICAR MAIS
+  JsonDeserializer.TRUSTED_PACKAGES,
+                     "com.alura.pix.dto");
+                     QUE SO CONFIAMOS NESSA PASTA
+
+
+
+
+
+     @Bean
+     public ConcurrentKafkaListenerContainerFactory<String, PixDTO>
+         kafkaListenerContainerFactory() {
+
+         ConcurrentKafkaListenerContainerFactory<String, PixDTO> factory =
+                 new ConcurrentKafkaListenerContainerFactory<>();
+         factory.setConsumerFactory(consumerFactory());
+         return factory;
+     }
+     AQUI PARA FAZER CONSUMIDOR RECEBER OS PARAMENTROS CONFIGURADOS ETC
+----------------------------IMPLEMENTAR
+VAMOS CRIAR UMA CLASSE SO PARA RECEBER ESSE CONDUMIDOR
+   @Autowired
+    private KeyRepository keyRepository;
+
+    @Autowired
+    private PixRepository pixRepository;
+
+    @KafkaListener(topics = "pix-topic", groupId = "grupo")
+    public void processaPix(PixDTO pixDTO) {
+        System.out.println("Pix  recebido: " + pixDTO.getIdentifier());
+
+        Pix pix = pixRepository.findByIdentifier(pixDTO.getIdentifier());
+
+        Key origem = keyRepository.findByChave(pixDTO.getChaveOrigem());
+        Key destino = keyRepository.findByChave(pixDTO.getChaveDestino());
+
+        if (origem == null || destino == null) {
+            pix.setStatus(PixStatus.ERRO);
+        } else {
+            pix.setStatus(PixStatus.PROCESSADO);
+        }
+        pixRepository.save(pix);
+    }
+
+    @KafkaListener(topics = "pix-topic", groupId = "grupo")
+    AQUI NOS PASSA ESSA ANOTAÇÃO, NO METODO QUE VAI FICAR OUVINDO O KAFKA E AS MENSAGENS
+    ENVIADAS
+    COM ESSA ANOTAÇÃO NOS DIZ AO SPRING QUE AQUI PARA RECER TAIS MENSAGEN
+    COMO CONFIGURA TEMOS QUE PASSAR
+    QUAL TOPICO ELA ESTA OUVINDO topics = "pix-topic"
+    E GRUPO DELE  groupId = "grupo"
+    ELE PODE TER QUALQUE NOME ESSE METODO
+    BOM NOS COLOCA O TIPO DE METODOS QUE VAI RECEBER COMO PARAMENTRO
+     public void processaPix(PixDTO pixDTO)
+     PROCESSAR A MENSAGEM E FAZER OQ TEMOS QUE FAZER COM MENSAGEM
