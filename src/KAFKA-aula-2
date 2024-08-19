@@ -1,0 +1,164 @@
+------------------------------------------Grupos de consumidores e diversos consumidores
+PARA RODAR EM GRUPOS DIFERENTES, VAMOS DIZER QUE NOSSO APP CRESCEU BASTANTE E TA TENDO GRANDES CHANCES DE REQUISIÇÃO
+VC PRECISA BALANCEAR KAFKA E QUE ELE RODE DE GRUPOS DIFERENTES, COMO SE FAZ ISSO CRIANDO GRUPOS PARA PROCESSAR
+VAMOS CRIAR FAZER ISSO COM FRUPOS DIFETENTES PRIMEIRO
+VAI RODAR VARIAS INSTANCIA
+   @KafkaListener(topics = "pix-topic", groupId = "grupo")
+  É SO MUDANDO NOME DOS GRUPOS
+     @KafkaListener(topics = "pix-topic", groupId = "grupo-1")
+     @KafkaListener(topics = "pix-topic", groupId = "grupo-2")
+BASICAMENTE AS DOIS GRUPOS RECEBE A MESMA MENSAGEM
+
+
+AGORA PARA FAZER BALANCEAMENTO DE CARGA COMO FARIAMOS ?????
+
+@KafkaListener(topics = "pix-topic", groupId = "grupo")
+@KafkaListener(topics = "pix-topic", groupId = "grupo")
+
+PARA ISSO BASTA RODAR MESMA APLICAÇÃO COM MESMO NOME DE GRUPO
+AI SE TOPIC TIVE JA PARTIÇÃO SO RODAR, QUE KAFKA FAZ BALANCEAMENTO SOZINHO
+
+
+
+
+
+
+
+---------------------------------------------Configurações no produtor e consumidor
+    @Bean
+    public ConsumerFactory<String, PixDTO> consumerFactory() {
+        Map<String, Object> props = new HashMap<>();
+        props.put(
+                ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
+                bootstrapAddress);
+        props.put(
+                ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
+                StringDeserializer.class);
+        props.put(
+                ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
+                JsonDeserializer.class);
+        props.put(
+                JsonDeserializer.TRUSTED_PACKAGES,
+                "*");
+        props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG,
+                100);
+        return new DefaultKafkaConsumerFactory<>(props);
+    }
+
+    props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG,
+                100);
+
+    ESSA AQUI AJUDA AUMENTAR O DESEMPENHO DO KAFKA, INVES DO IR TODA HORA NO KAFKA PEGAR MENSAGEM VOLTA
+    ELE PODE IR PEGAR VARIAS MENSAGEM ASSIM EVITTANDO, ALGUM LEG DE IR E VOLTAR TODA HORA
+    DEFAULT DELA 500 NOS PODEMOS AUMENTAR O DIMINUTIR
+
+
+        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG,
+                    "latest"
+            );
+
+    ESSA AQUI DIZ QUE SO PARA COMEÇAR A PEGAR AS MENSAGEM QUANDO APLICAÇÃO ESTIVER NO AR
+    ENTÃO DIZ QUE QUANTO APLICAÇÃO NÃO TIVER NO AR NÃO SOBE
+    ENTÃO IMAGINA QUE 1000 MENSAGEM QUE NOS EVIAMOS, MAS ELE SO COMEÇA A CONSUMIR AS MENSAGEM APARTIR
+    DA APLICAÇÃO NO AR ENTÃO ELE IGNORA AS OUTRAS 1000
+      props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG,
+                        "earliest"
+                );
+    E SE MUDAMOS PARA ESSA, ELE VAI PEGAR DES DA MENSAGEM MAIS ANTIGA DAQUELE TOPIC
+
+     props.put(ConsumerConfig.ALLOW_AUTO_CREATE_TOPICS_CONFIG,
+                    false
+            );
+
+     ESSA CONFIGURAÇÃO FAZ COM QUE APLICAÇÃO POSSA CRIAR TOPIC, AUTOMATICAMENTE SOZINHA
+
+
+     props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG,
+                     false
+             );
+     E TEM ESSA CONFIG, OQ ESSA FAZ, SEMPRE QUE UM CONSUMIDOR, CONSOME UMA MENSAGEM ELE AVISA
+     AUTOMATICAMENTE PARA KAFKA QUE CONSUMIU ESSA MENSAGEM, ISSO DESATIVA OU ATIVA ESSSA FUNÇÃO
+     ISSO FAZ COM QUE KAFKA NÃO DISTRIBUA MAIS ESSA MENSAGEM
+     E TEMPOS QUE FAZER CODIGO PARA AVISAR PARA KAFKA QUE CONSUMIMOS ESSA MENSAGEM
+
+COMO SE FAZ ISSO VAMO VER AGORA
+  public void processaPix(PixDTO pixDTO, Acknowledgment acknowledgment) {
+        acknowledgment.acknowledge();
+ DESTE JEITO AI NOS AVISAMOS PARA KAFKA QUE CONSUMIMOS A MENSSAGEM SO PRECISA ADD
+ Acknowledgment COMO PARAMETRO DO METODO
+         acknowledgment.acknowledge(); ESSE METODO PARA FALAR PARA KAFKA QUE FEZ COMIT
+
+-------------------------Retentativas
+PRIMEIRO DE TUDP O PARA FAZER AS RETENTATICAS NO KAFKA
+NO ARQUIVO DE CONFIGURAÇÃO DO PRODUCER TEM QUE TER
+    @Bean
+    public ProducerFactory<String, PixDTO> producerFactory() {
+        Map<String, Object> configProps = new HashMap<>();
+        configProps.put(
+                ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
+                bootstrapAddress);
+        configProps.put(
+                ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
+                StringSerializer.class);
+        configProps.put(
+                ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
+                JsonSerializer.class);
+        return new DefaultKafkaProducerFactory<>(configProps);
+    }
+
+    @Bean
+    public KafkaTemplate<String, PixDTO> kafkaTemplate() {
+        return new KafkaTemplate<>(producerFactory());
+    }
+    AS CONFIGURAÇÃO DE MANDAR MENSAGEM
+-----------------------------------COMO IMPLEMENTAR
+PRIMEIRO NO CONSUMIDOR DE MENSAGEM TEM QUE ADD UMA ANOTAÇÃO
+    @RetryableTopic()
+ESSA ANOTAÇÃO QUER DIZER SE ACONTECER UM ERRO NA HORA DE CONSUMIR UMA MENSAGEM ELE VAI TENTAR FAZER UM
+RETENTATIVA, OQ QUANTO VC QUISER
+
+DEPOIS DISTO VC TEM PASSAR OS PARAMETROS DE CONFIGURAÇÃO DELA
+PRIMEIRO PARAMETRO QUE VAMOS ADD
+ backoff = @Backoff(value = 3000L)
+ QUANTO TEMPO DEPOIS DE ERRO NOS VAMOS TENTAR FAZER RETENTATIVA
+ BOM ELE MILE SEGUNDO QUE AQUI DA 3s
+
+
+
+attempts = "4"
+O SEGUNDO PARAMETRO QUANTAS VEZES ELE VAI TENTAR FAZER RETENTATIVA POR PADRAO SÃO 3
+
+autoCreateTopics = "true"
+O TERCEIRO PARAMETRO SE ELE VAI CRIAR OS TOPICS DE RETATIVA SOZINHO OU NÃO
+
+
+O QUARTO PARAMETRO QUAIS EXCEPTIONS ELE EU VAI PODE DAR ERRO PARA SER PROCESSADAS PARA POSSUIR UMA RETENTATIVA
+include = Exception.class
+
+
+ASSIM FICA METODO NO FINAL
+    @KafkaListener(topics = "pix-topic", groupId = "grupo")
+    @RetryableTopic(
+            backoff = @Backoff(value = 3000L),
+            attempts = "4",
+            autoCreateTopics = "true",
+            include = KeyNotFoundException.class
+
+    )
+    public void processaPix(PixDTO pixDTO, Acknowledgment acknowledgment) {
+        acknowledgment.acknowledge();
+        System.out.println("Pix  recebido: " + pixDTO.getIdentifier());
+
+        Pix pix = pixRepository.findByIdentifier(pixDTO.getIdentifier());
+
+        Key origem = keyRepository.findByChave(pixDTO.getChaveOrigem());
+        Key destino = keyRepository.findByChave(pixDTO.getChaveDestino());
+
+        if (origem == null || destino == null) {
+            pix.setStatus(PixStatus.ERRO);
+            throw new KeyNotFoundException();
+        } else {
+            pix.setStatus(PixStatus.PROCESSADO);
+        }
+        pixRepository.save(pix);
+    }
