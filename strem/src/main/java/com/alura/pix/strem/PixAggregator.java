@@ -26,7 +26,7 @@ public class PixAggregator {
                 ;
 
         stream.toStream().print(Printed.toSysOut());
-        stream.toStream().to("pix-topic-validação", Produced.with(Serdes.String(), Serdes.Double()));
+        stream.toStream().to("pix-topic-agregacao", Produced.with(Serdes.String(), Serdes.Double()));
 
     }
 }
