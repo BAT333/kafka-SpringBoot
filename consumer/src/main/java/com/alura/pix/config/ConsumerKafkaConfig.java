@@ -1,6 +1,9 @@
 package com.alura.pix.config;
 
 import com.alura.pix.dto.PixDTO;
+import io.confluent.kafka.serializers.KafkaAvroDeserializer;
+import io.confluent.kafka.serializers.KafkaAvroDeserializerConfig;
+import io.confluent.kafka.serializers.KafkaAvroSerializer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
@@ -32,8 +35,11 @@ public class ConsumerKafkaConfig {
                 ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
                 StringSerializer.class);
         configProps.put(
+                "schema.registry.url",
+                "http://localhost:8081");
+        configProps.put(
                 ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
-                JsonSerializer.class);
+                KafkaAvroSerializer.class);
         return new DefaultKafkaProducerFactory<>(configProps);
     }
 
@@ -53,8 +59,14 @@ public class ConsumerKafkaConfig {
                 ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
                 StringDeserializer.class);
         props.put(
+                "schema.registry.url",
+                "http://localhost:8081");
+        props.put(
                 ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
-                JsonDeserializer.class);
+                KafkaAvroDeserializer.class);
+        props.put(KafkaAvroDeserializerConfig.SPECIFIC_AVRO_READER_CONFIG,
+                true);
+
         props.put(
                 JsonDeserializer.TRUSTED_PACKAGES,
                 "*");

@@ -1,0 +1,231 @@
+--------------------------------------------------------------instalando o Confluent Kafka
+A partir das Aulas 4 e 5, será necessário utilizar o Confluent Kafka,
+pois apenas essa versão possui as ferramentas Schema Registry e Kafka Connect
+
+Diferentemente do Apache Kafka, o Confluent Kafka não é totalmente livre, ele possui uma
+licença gratuita que possibilita o uso para desenvolvimento e também para produção, mas com alguns limites de uso.
+
+Depois de baixar o Confluent, basta descompactar o arquivo baixado
+(a versão da ferramenta é confluent-x.y.z.zip - x.y.z) e
+executar o seguinte comando de dentro da pasta: ./bin/confluent local services start
+
+
+-----------------------------Confluent Kafka
+Para rodar a aplicação, recomendamos que você coloque duas variáveis de ambiente:
+CONFLUENT_HOME e PATH. No Mac e no Linux, basta fazer o export e no Windows é preciso configurar
+a variável de ambiente no sistema.
+
+Embora não seja obrigatório, fazendo isso você pode rodar o comando confluent local services
+start em qualquer lugar da máquina.
+
+Feito isso, temos acesso a todos os serviços do CONFLUENT. Nesse curso utilizaremos o
+ZooKeeper, Kafka, Schema Registry e o Connect is.
+
+
+-------------------------------Schema Registry
+O Kafka, por padrão, não valida as mensagens enviadas para o tópico. Geralmente isso não é necessário,
+afinal produtor e o consumidor são aplicações controladas, portanto sabemos quem pode ou não acessar
+determinado tópico.
+
+
+Se adicionarmos o Schema Registry, o produtor, antes de enviar uma mensagem envia um schema para a
+ferramenta Schema Registry. Só depois disso que a mensagem é enviada ao Kafka
+
+
+--------------------------Avro
+Outro ponto interessante dessa ferramenta é que geralmente utilizamos o Apache Avro,
+uma biblioteca de serialização e desserialização de dados.
+
+Uma das vantagens é que o Avro faz a validação utilizando dados binários.
+Assim, as mensagens são menores, acelerando a transmissão dos dados na rede.
+
+
+-----------------------------Usando o Schema Registry no produtor
+
+PRIMEIRO PONTO ADD NAS DEPEDENCIA A DEPENDECIA QUE PRECISA SE ADD
+<dependency>
+    <groupId>io.confluent</groupId>
+    <artifactid>kafka-avro-serializer</artifactId>
+    <version>7.4.0</version>
+</dependency>
+
+
+BOM CASO E ALGUM ERRO NOS FAZ ELE PROCURAR E GUIANDO O CAMINHO PARA ENCONTRA
+<repositories>
+    <repository>
+        <id>confluent</id>
+        <url>https://packages.confluent.io/maven/</url>
+    </repository>
+</repositories>
+
+<dependencies>
+    <dependency>
+        <groupId>io.confluent</groupId>
+        <artifactId>kafka-avro-serializer</artifactId>
+        <version>7.4.0</version>
+    </dependency>
+</dependencies>
+-
+
+
+TBM VAMOS ADD OS PLUGUINS QUE GERADOR DE CODIGO AUTOMATICO
+</excludes>
+</configuration>
+</plugin>
+<plugin>
+<groupId>org.apache.avro</groupId>
+<artifactId>avro-maven-plugin</artifactId>
+<version>1.10.2</version>
+<executions>
+<execution>
+<phase>generate-sources</phase>
+<goals>
+<goal>schema</goal>
+</goals>
+<configuration>
+<sourceDirectory>${project.basedir}/src/main/avro/</sourceDirectory> <outputDirectory>${project.basedir}/src/main/java/</outputDirectory>
+</configuration>
+</execution>
+</executions>
+</plugin>
+</plugins>
+</build>
+
+
+--------------PROXIMA PARTE CRIAR UM ARQUIVO AVSC
+QUE PARA DEFINIR NOSSO ESQUEMA É COMO EU VOU MANDAR ESSES DADOS, ANTES ISSO ESTAVA SENDO CONTROLADO PELO DTO
+PARA ISSO PRECISAMOS GERA UM AVSC PARA CONTROLAR ESSE ESQUEMA TUDO MAIS
+
+
+{"namespace": "com.alura.pix.avro",
+"type": "record",
+"name": "PixRecord",
+"fields": [
+    {"name": "identificador", "type": "string"},
+    {"name": "chaveOrigem", "type": "string"},
+    {"name": "chaveDestino", "type": "string"},
+    {"name": "valor", "type": "double"},
+    {"name": "dataTransferencia", "type": "string"},
+    {"name": "status", "type": "string"}
+]
+}
+
+"namespace": "com.alura.pix.avro",-> NOME DO NOSSO PACOTE
+"type": "record", -> TIPO
+"name": "PixRecord",-> NOME QUE VAMOS DAR PARA RECEBER
+
+
+"fields": [
+    {"name": "identificador", "type": "string"},
+    {"name": "chaveOrigem", "type": "string"},
+    {"name": "chaveDestino", "type": "string"},
+    {"name": "valor", "type": "double"},
+    {"name": "dataTransferencia", "type": "string"},
+    {"name": "status", "type": "string"}
+]- >POR FIM OS CAMPOS DELES QUE BAI RECEBER E  O TIPO  QUE ELE VAI RECEBER
+
+
+DEPOIS DE CRIAR COMO CLASSE DEVE SER GERADA, VAMOS EM MAVEN, E DEPOIS EM COMPILE E VAI INCIAR
+E CRIAR UMA CLASSE CHMADA PIXRECORD AONDE QUERIAMOS ESSA CLASS BASICAMENTE
+TUDO QUE NOS PRECISA PARA FAZER A SERIALIZAÇÃO DOS DADOS EM BIT, E TRASFORMA TUDO
+
+
+POR AHORA VAMOS TER QUE MUDAR TODOS DE PIXDTO, PARA PIXRECORDE NO CONFIG
+
+
+package com.alura.pix.config;
+
+import com.alura.pix.avro.PixRecord;
+import io.confluent.kafka.serializers.KafkaAvroSerializer;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.serialization.StringSerializer;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.core.DefaultKafkaProducerFactory;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.core.ProducerFactory;
+import org.springframework.kafka.support.serializer.JsonSerializer;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@Configuration
+public class ProducerKafkaConfig {
+
+
+    @Value(value = "${spring.kafka.bootstrap-servers:localhost:9092}")
+    private String bootstrapAddress;
+
+    @Bean
+    public ProducerFactory<String, PixRecord> producerFactory() {
+        Map<String, Object> configProps = new HashMap<>();
+        configProps.put(
+                ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
+                bootstrapAddress);
+        configProps.put(
+                ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
+                StringSerializer.class);
+        configProps.put(
+                "schema.registry.url",
+                "http://localhost:8081");
+        configProps.put(
+                ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
+                KafkaAvroSerializer.class);
+        return new DefaultKafkaProducerFactory<>(configProps);
+    }
+
+    @Bean
+    public KafkaTemplate<String, PixRecord> kafkaTemplate() {
+        return new KafkaTemplate<>(producerFactory());
+    }
+
+}
+
+ASSIM FICA CLASS NO FINAL NOS TEMOS QUE ADD NOVAS DUAS CONFIGURAÇÃO
+configProps.put(
+                    "schema.registry.url",
+                    "http://localhost:8081"); -> ESSE PARA DEFINIR CAMINHO DO ESQUEMA REGISTER E SE TIVESSE NA INTERNET
+                    ERRA SO TIRA localhost:8081" E FALA LOCAL ONDE ELE ESTA
+    configProps.put(
+                    ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
+                    KafkaAvroSerializer.class); -> DEPOIS SERIALIZAÇÃO DOS DADOS
+
+
+
+
+
+E DEPOIS MUDAR PIXSERVICE PARA INVES DE PIXDTO PARA PIXRECORD
+
+-------------------------------------------Usando o Schema Registry no consumidor
+PRIMEIRO DE TUDO ADD AS DEPENDENCIA NECESSARIAS
+<repositories>
+    <repository>
+        <id>confluent</id>
+        <url>https://packages.confluent.io/maven/</url>
+    </repository>
+</repositories>
+
+<dependencies>
+    <dependency>
+        <groupId>io.confluent</groupId>
+        <artifactId>kafka-avro-serializer</artifactId>
+        <version>7.4.0</version>
+    </dependency>
+</dependencies>
+
+
+
+ALTERA E ADD AS CONFIGURAÇÃO NECESSARIA NO KAFKACONFIGCONSUMER
+        configProps.put(
+                "schema.registry.url",
+                "http://localhost:8081");
+        configProps.put(
+                ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
+                KafkaAvroDeserializer.class);
+                props.put(KafkaAvroDeserializerConfig.SPECIFIC_AVRO_READER_CONFIG,
+                true);
+props.put(KafkaAvroDeserializerConfig.SPECIFIC_AVRO_READER_CONFIG,
+true); -> so para saber que vai usar avro na hora de deserializar
+
+AGORA MUDAR AS COISA PARA PIXRECORD
