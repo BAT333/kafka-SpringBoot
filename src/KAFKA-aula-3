@@ -150,5 +150,92 @@ BOM PRIMEIRO DE TUDO TEMOS QUE CRIAR UMA CLASS SERVE PARA USAR ELE
 
     DEPOIS COMO ULTILIZAR ESSES DADOS
 
+     KStream<String, PixDTO>
+
+     COM ESSE METODO PRIMEIRO DE TUDO ULTILIZAMOS COMO VAI CHEGAR A KEY DA KAFKA
+     E METODO E MENSAGEM ENVIADO NELE
+     DEPOIS VAMOS ULTIZAR ESSE METODO KSTREM, COM ESSE METODO, VAMOS PODER MANIPULAR
+     DADOS QUE CHEGA DO KAFKA
+
+
+     SEGUINDO
+             KStream<String, PixDTO> stream = builder
+                     .stream("pix-topic", Consumed.with(Serdes.String(), PixSerdes.serdes()));
+
+                     VAMOS USAR METODO QUE IMPLEMENTAMOS PARA PAGAR ESSA STREM
+                     PRIMEIRO PASSO
+                     PEGAR O STREM, QUAL TOPIC ESSA STREM VAI PEGAR O NOME DELE
+                     E COMO COSUMIDO COMO VAI RECEBER A CHAVAVE, E COMO VAI RECEBER A MENSAGEM EM QUAL FORMATO
+
+
+
+         .peek((key,value)-> System.out.println("PIX RECEBIDO "+ value.getChaveOrigem()))
+
+        SERVE PARA SEMPRE QUE RECEBER UMA MENSAGEM FAZER ALGO COM ELA TIPO UMA FUNÇÃO
+
+
+          .filter((key,value)-> value.getValor()>1000)
+
+        AQUI FILTRA AS MENSAGENS
+
+         .groupBy((key,value)->value.getChaveOrigem())
+
+        PARA FAZER O AGRUPAMENTO PELA CHAVE DE ORIGEM
+
+               .aggregate(
+                        ()->0.0,(key,velue,aggregate)->(aggregate + velue.getValor()),
+                        Materialized.with(Serdes.String(),Serdes.Double())
+
+                )
+
+                AQUI SERVER PARA AGREGAR AJUNTAR VALORES EM LUGAR AGREGAR
+                VAI SEMPRE TER VALOR INICIAL DELE
+                (key,velue,aggregate)
+                KEY -> CHAVE DA MENSAGEM
+                VALUE -> VALOR
+                aggregate -> E AQUI VALOR JA AGREGADO O VALOR JA SALVO NESSA CHAVE
+                AQUI FORMA QUE VAI AGREGAR VALOR
+                (aggregate + velue.getValor())
+
+                E POR ULTIMO ONDE VAR MEMORIZAR ESSA MENSAGEM
+                Materialized.with(Serdes.String(),Serdes.Double())
+                PAR SALVAR A MENSAGEM,
+
+
+                ps: sempre que usar aggregate
+                KTable<String, Double> vai ser KTable e valor retornado
+
+                    KTable<String, Double> stream = builder
+                                .stream("pix-topic", Consumed.with(Serdes.String(), PixSerdes.serdes()))
+                                .peek((key,value)-> System.out.println("PIX RECEBIDO "+ value.getChaveOrigem()))
+                                .groupBy((key,value)->value.getChaveOrigem())
+                                .aggregate(
+                                        ()->0.0,(key,velue,aggregate)->(aggregate + velue.getValor()),
+                                        Materialized.with(Serdes.String(),Serdes.Double())
+
+                                )
+                                ;
+
+
+------------------------PARA FAZER QUE TENHA UMA SAIDA UM RETORNO ETC
+
+        stream.print(Printed.toSysOut());
+A VAI FICAR IMPRIMIDO OS PIX QUE VAI CHEGANDO
+
+
+AQUI UMA MUITO INTERESSANTE
+        stream.to("pix-topic-validação", Produced.with(Serdes.String(), PixSerdes.serdes()));
+AQUI FAZ COM QUE AS MENSAGENS QUE CHEGA VAI SENDO MANDA PARA OUTRO TOPIC PASTA
+FALAR TOPIC QUE DESEJA QUE SEJA MANDADO, E COMO VAI SER MANDADO OS TOPIC VAI SER SERIALIZAÇÃO DELES
+
+
+
+
+---------------------MUDANÇAS COM KTABLE
+     stream.toStream().print(Printed.toSysOut());
+     stream.toStream().to("pix-topic-validação", Produced.with(Serdes.String(), Serdes.Double()));
+
+     MUDANÇAS MAIS SIGNIFICATIVA QUE TEM QUE TRASFORMA EM STREM
+
 
 
