@@ -1,0 +1,154 @@
+Processamento batch
+Antes de começarmos a implementação de fato, precisamos entender o que é stream ou fluxo. Normalmente, desenvolvemos aplicações usando o processamento batch, um modelo tradicional de análise de dados em que recebemos todos os dados de todas as entidades necessárias para a análise e, com eles prontos, começamos o processamento.
+
+Vamos acompanhar alguns exemplos de aplicações em que usamos o processamento batch.
+
+Processamento e análise de dados históricos
+Imagine que precisamos processar o histórico de todos os jogos de futebol que aconteceram nos últimos 10 anos. Com os dados prontos, podemos analisar quem fez mais e menos pontos, mais gols, dentre outros.
+
+Geração de relatórios
+Por exemplo, se precisamos fazer um relatório de vendas do último mês. Então, temos os dados do último mês e fazemos um relatório a partir desses dados.
+
+Processamento stream
+O processamento de stream é um pouco diferente. Nele, processamos os fluxos de dados. Enquanto os dados estão chegando, eles já vão sendo processados. Não esperaremos a chegada dos dados do mês inteiro para, então, processá-los. Estamos tratando de um processo concomitante, em que o dado chega e já é processado e analisado.
+
+Vamos acompanhar alguns exemplos em que usamos processamento de streams!
+
+Processamento e visualização de dados em tempo real
+Vamos imaginar que desejamos saber quanto estamos vendendo agora, por exemplo, das 8h até 10h, e, não, o relatório de vendas do último mês. Então, precisamos realizar esse tipo de processamento que visualiza os dados em tempo real.
+
+Visualização de vídeos na internet
+Talvez esse seja o caso de uso mais conhecido. Até chamamos empresas como YouTube, Netflix e outras com visualização de vídeos na internet de streams.
+
+Análise de logs
+Temos uma aplicação e queremos saber se ela tem algum problema. Então, precisamos processar os dados, isto é, os logs, em tempo real. Ou seja, log é gerado, processamos e analisamos se existe algum erro.
+
+Análise de fraudes
+Realizamos uma compra no cartão de crédito ou um pix e queremos saber se essa compra é uma fraude ou não. Não adianta descobrir que foi fraude um mês depois, isto é, não adianta processar dados históricos. É importante fazer uma verificação no momento em que o dado chega.
+
+Batch x Stream
+Um bom exemplo para entender a diferença entre batch e stream são os vídeos. Quando fazemos o processamento batch, baixamos o vídeo na internet, esperamos todos os dados chegarem e, com o arquivo completo, assistimos o filme.
+
+No processamento batch, precisamos baixar o arquivo inteiro antes de exibir o filme.
+
+Já no stream, apertamos play para que o vídeo seja exibido. Enquanto os dados vão chegando, o player já vai exibindo o vídeo. Não é necessário esperar o vídeo inteiro chegar. Existe até o Buffer, que carrega um pouco o vídeo para frente.
+
+No processamento stream, o filme é exibido enquanto os dados estão chegando.
+
+Na análise de fraude, acontece algo parecido. Podemos ter a análise de fraude do passado, porque é importante analisar os dados históricos e conferir se houve alguma fraude, mas, a depender da aplicação, por exemplo, um cartão de crédito ou pix, temos que saber na hora, assim, se houver mesmo uma fraude, podemos impedir que ela aconteça.
+
+Kafka Stream
+Como funciona o Kafka Stream? Temos a aplicação, que é o produtor. Produziremos uma mensagem para ao Kafka. O Pix Validator, aplicação que implementamos nas aulas anteriores, continuará funcionando normalmente. E adicionaremos uma nova aplicação chamada Pix Aggregator, que fará análises usando fluxo de dados.
+
+Por exemplo, vamos fazer o agrupamento dos dados pelas chaves que enviam pagamentos pix e somaremos quanto dinheiro já foi transferido por essa chave. Conseguimos fazer isso em tempo real.
+
+Então, quando chega um pagamento novo, somamos o valor. Não é preciso fazer o processamento de dados históricos. Os pagamentos vão chegando e vamos agregando os valores usando streams.
+
+
+PROCESSAR O DADOS, BATCH ESPERA CARREGAR TODO OS DADOS ANTES DE PREOCESSAR
+JA COM STREM, VAI MANDANDO OS DADOS ELE VAI PROCESSANDO NA HORA
+
+
+
+-----------------------------------Processando Streams
+
+
+PRIMEIRO PASSO PARA FAZER ISSO VAMOS CRIAR UMA CLASS COSUMIDOR PARA ULTILIZAR O STREM
+MAS COM UMA PEQUENA DIFENÇA NA CONFUGRAÇÃO
+
+
+import static org.apache.kafka.streams.StreamsConfig.APPLICATION_ID_CONFIG;
+import static org.apache.kafka.streams.StreamsConfig.BOOTSTRAP_SERVERS_CONFIG;
+import static org.apache.kafka.streams.StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG;
+import static org.apache.kafka.streams.StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG;
+
+
+@Configuration
+@EnableKafkaStreams
+public class ProducerKafkaConfig {
+
+    @Bean(name = KafkaStreamsDefaultConfiguration.DEFAULT_STREAMS_CONFIG_BEAN_NAME)
+    public KafkaStreamsConfiguration kafkaStreamsConfig() {
+        Map props = new HashMap<>();
+        props.put(APPLICATION_ID_CONFIG , "kafka-streams-demo-6");
+        props.put(BOOTSTRAP_SERVERS_CONFIG, bootstrapAddress);
+        props.put(DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.String().getClass().getName());
+        props.put(DEFAULT_VALUE_SERDE_CLASS_CONFIG, PixSerdes.class);
+        return new KafkaStreamsConfiguration(props);
+    }
+
+
+config para strem do kafka precisa add essa dependencia
+
+  <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-streams</artifactId>
+        </dependency>
+
+ SÃO CONFIGURAÇÃO DE STREM DO KAFKA PARA JAVA PARA FICAR PREOCESSANDO DADOS
+ PARA QUE SERVE A GRADE MAIORIA
+
+     @Bean(name = KafkaStreamsDefaultConfiguration.DEFAULT_STREAMS_CONFIG_BEAN_NAME)
+     AQUI PARA USAR AS CONFIGURAÇÃO PADRÃO DO KAFKA COMO NOME DIZ PARA USAR CONFIGURAÇÃO
+     PADRÃO
+
+
+ props.put(APPLICATION_ID_CONFIG , "kafka-streams-demo-6");
+        props.put(BOOTSTRAP_SERVERS_CONFIG, bootstrapAddress);
+        props.put(DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.String().getClass().getName());
+        props.put(DEFAULT_VALUE_SERDE_CLASS_CONFIG, PixSerdes.class);
+        return new KafkaStreamsConfiguration(props);
+
+ A primeira é a APPLICATION_ID_CONFIG. Obrigatoriamente, precisamos passá-la quando
+ processamos os streams, porque ela criará alguns tópicos nos streams e usar o ID da
+ aplicação como nome do tópico.
+
+ BOOTSTRAP_SERVERS_CONFIG
+ AQUI SERVE COMO TODOS OS SERVE QUE ELE VAI LOGAR PARA PEGAR OS TOPIC
+ E AS MENSAGEM DESTES TOPIC
+
+
+  props.put(DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.String().getClass().getName());
+  props.put(DEFAULT_VALUE_SERDE_CLASS_CONFIG, PixSerdes.class);
+
+  ESSE DOIS COMO PADRÃO PARA SEREALIZAR E DESERIALIZAR MENSAGEM NO KAFKA
+
+
+ MAS É DIFERENTE ESSE SERIALIZA E DESERIALIZA
+ POR QUE NOS CRIAMOS UMA CLASSE PARA SERIALIZAR E DESERIALIZAR ELE
+ COMO DA PARA VER PARA SERIALIZAR ELS DESTA FORMA CRIAMOS UMA CLASS COMO FICOU ESSA CLASS
+
+
+ public class PixSerdes extends Serdes.WrapperSerde<PixDTO> {
+
+     public PixSerdes() {
+         super(new JsonSerializer<>(), new JsonDeserializer<>(PixDTO.class));
+     }
+
+     public static Serde<PixDTO> serdes() {
+         JsonSerializer<PixDTO> serializer = new JsonSerializer<>();
+         JsonDeserializer<PixDTO> deserializer = new JsonDeserializer<>(PixDTO.class);
+         return Serdes.serdeFrom(serializer, deserializer);
+     }
+
+ CLASS BEM SIMPLES PARA MOSTRA COMO É PARA DESERIALIZAR E SERIALIZAR
+
+
+
+
+------------------COMO UTILIZAR ESSE STREM
+BOM PRIMEIRO DE TUDO TEMOS QUE CRIAR UMA CLASS SERVE PARA USAR ELE
+
+
+  @Autowired
+    public void aggregator(StreamsBuilder builder){
+
+    }
+
+    ESSE AUTOWIRED
+    PARA METODO INICIAR ASSIM QUE APLICAÇÃO INICIAR
+
+    DEPOIS COMO ULTILIZAR ESSES DADOS
+
+
+
