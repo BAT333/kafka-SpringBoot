@@ -1,0 +1,278 @@
+------------------------------------------ Kafka Connect
+----------------PREPARANDO O SISTEMA
+Para utilizar o Postgres com o Kafka Connect, é necessário configurar o Postgres para a execução no modo de replicação. Para isso, adicione as seguintes linhas no final do arquivo postgresql.conf:
+
+# LOGGING
+log_min_error_statement = fatal
+# CONNECTION
+listen_addresses = '*'
+# MODULES
+shared_preload_libraries = 'decoderbufs'
+# REPLICATION
+wal_level = logical             # minimal, archive, hot_standby, or logical (change requires restart)
+max_wal_senders = 1             # max number of walsender processes (change requires restart)
+#wal_keep_segments = 4          # in logfile segments, 16MB each; 0 disables
+#wal_sender_timeout = 60s       # in milliseconds; 0 disables
+max_replication_slots = 1       # max number of replication slots (change requires restart)
+Copiar código
+A documentação do Confluent traz um tutorial completo sobre como configurar o Postgres para utilizá-lo com o Kafka Connect.
+
+Outra possibilidade, é usar a imagem do Docker debezium/postgresql, que já está totalmente configurada para ser usada com o Kafka Connect. Ela pode ser utilizada com o seguinte comando:
+
+docker run --name postgres -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d debezium/postgres:15
+Copiar código
+Por fim, depois que o Postgres for totalmente configurado, é necessário instalar dois plugins no Confluent Kafka para a utilização do Postgres com o Kafka Connect. Para isso, basta executar os seguintes comandos:
+
+confluent-hub install debezium/debezium-connector-postgresql:2.1.4
+
+confluent-hub install confluentinc/kafka-connect-jdbc:10.7.0
+-------------------------------O que é o Kafka Connect
+
+
+
+Kafka Connect
+Ele serve para conectar o Kafka em algumas fontes de dados. Nas nossas aplicações, nós implementamos o produtor. Gerávamos as mensagens, recebíamos o pix na rota REST e enviávamos para o Kafka.
+
+O Kafka Connect possui uma ferramenta que pode facilitar a implementação do produtor. Ele funciona da seguinte maneira:
+
+Ele conecta em uma fonte de dados e, automaticamente, pega um dado e manda para um tópico. Uma fonte de dados possível é o PostgreSQL. Do jeito que estamos fazendo, salvaríamos a mensagem no PostgreSQL e, em vez de ter que mandar para o tópico, o Kafka conecta diretamente no PostgreSQL e pega essa mensagem para mandar ao tópico.
+
+Isso facilita bastante a parte da implementação do produtor, pois não precisamos escrever nenhuma linha de código para isso, apenas configurar a fonte de dados.
+
+O Kafka Connect pode ter várias fontes de dados:
+
+Bancos de dados relacionais
+Bancos de dados não relacionais
+File Storage (nuvem)
+Aplicações
+Qual a diferença de usar ou não usar o Kafka Connect?
+
+Nossa aplicação está usando a seguinte arquitetura:
+
+Insira aqui a descrição dessa imagem para ajudar na acessibilidade
+Temos a API Rest e, ao mesmo tempo, ela é o produtor. Estamos recebendo o pagamento do pix na rota Rest e fazemos duas coisas: salvar esse pagamento do banco de dados e mandar para o Kafka.
+
+Quando essa mensagem do Kafka é recebida no consumidor, verificamos se o pagamento foi efetuado com sucesso, se as chaves existem. Se foi, salvando o novo status no banco de dados. É assim que está funcionando a nossa aplicação.
+
+Com o Kafka Connect conseguimos tirar a etapa de mandar do API Rest para o Kafka, vai direto para o banco de dados.
+
+Insira aqui a descrição dessa imagem para ajudar na acessibilidade
+Com essa mudança, a nossa aplicação, que atualmente é o produtor, será apenas API Rest. Ela vai receber os dados do pix e salvar no banco de dados. Enquanto isso, o Kafka vai, automaticamente, verificar o banco de dados para saber se novos registros foram salvos lá.
+
+Se tiver algum novo registro, ele pega esse dado no banco de dados e manda para um tópico do Kafka. O consumidor continua funcionando da mesma forma.
+
+Faremos uma pequena mudança no consumidor, mas o jeito como o método funciona é igual. A grande diferença é que não precisaremos mais mandar mensagem para o Kafka.
+
+
+
+
+--------------------------------Salvando as informações em um banco de dados
+
+PRIMEIRO VAMOS CONFIGURA PIXSERVICE PRODUTO
+VAMOS TIRA MANDAR MENSAGEM PARA O CONSUMIDOR POR QUE ISSO VAI SER FEITO DE MANEIRA AUTOMATICA DIRETO POR
+ONDE VAMOS MANDAR
+
+    @Autowired
+    private final PixRepository pixRepository;
+
+    public PixDTO salvarPix(PixDTO pixDTO) {
+        pixRepository.save(Pix.toEntity(pixDTO));
+
+        return pixDTO;
+    }
+
+ LOGO EM SEGUIDA SO CINFUGURA KAFKA
+
+----------------Configurando o Kafka Connect
+    Para configurar o Kafka Connect vamos no Control Center do Confluent, no localhost:9021. No menu à esquerda, vamos clicar em "Connect", que é onde vamos configurar o Kafka Connect.
+
+    Cluster name	Total connectors	Running connectors	Degraded connectors	Failed connectors
+    connect-default	0	0	0	0
+    Podemos clicar em "connect-default" e, em seguida, clicar em "Add connector" para adicionar um novo conector.
+
+    Vai aparecer várias opções. Usaremos a opção "PostgresConnector".
+
+    Vai abrir uma janela com várias configurações. Não passaremos por todas elas porque são muitas mesmo. Mas temos, por exemplo, o serializador da chave do Kafka e o serializador do valor. Usaremos as propriedades padrões.
+
+    Nesta tela, a parte mais importante é onde configuramos qual Postgres queremos conectar. Nesta seção referente ao Postgres temos campos como:
+
+    Topic prefix
+    Hostname
+    Port
+    User
+    Password
+    Database
+    Plugin
+    Slot
+    Primeiro, vamos definir o campo "Topic prefix", quando começar a funcionar o Connect ele vai criar um tópico para armazenar as mensagens que ele vai pegar do banco de dados. No campo "Topic prefix" escreveremos: pix-service.
+
+    O Hostname é o Postgres que vamos conectar. Como vamos conectar na máquina local, escreveremos: localhost. Se fosse um endereço na internet, colocaríamos a URL.
+
+    A Porta será a porta padrão do Postgres: 5432. Se o seu Postgres estiver rodando em outra porta, é só colocar aqui.
+
+    O user será: postgres. Password também será postgres, para o nosso exemplo.
+
+    No campo "Database" escreveremos postgres.
+
+    No campo "Plugin" temos duas opções: decoderbuf e pgoutput. Isso define como o Connect se conecta com o Kafka. Para nós não faz muita diferença, vamos selecionar o "output".
+
+    E o campo "slot" é uma área de memória que o Connect vai usar para conectar com o Postgres. Geralmente, para garantir, uso mais ou menos o mesmo nome que coloquei no campo "Topic prefix". Então, no campo "slot" escreveremos: pix_service. Com underline porque o slot não pode ter traço.
+
+    Outro campo que precisamos configurar é o "SSL mode". Como estamos rodando localmente, vamos só desabilitar porque não tem certificado para fazer conexão.
+
+    Mas se tivesse SSL ou se fosse um HTTPS teria que configurar também a parte de certificado.
+
+    Por fim, a última configuração que precisamos fazer é no campo "Include Tables". Vamos informar quais tabelas queremos conectar com o Kafka Connect. Se não informarmos as tabelas, ele vai colocar todas.
+
+    Nesse campo "Include Tables" colocaremos public.pix. O "public." porque por padrão o Schema coloca "public" e "pix" é o nome da tabela.
+
+    Pronto! Fizemos a configuração básica do Connect para conectar nossa tabela.
+
+    Podemos clicar em "Next". Ele vai exibir um JSON com todas as configurações que fizemos:
+
+    {
+       "name": "PostgresConnectorConnector_0",
+       "config": {
+       "name": "PostgresConnectorConnector_0",
+       "connector.class":    "io.debezium.connector.postgresql.PostgresConnector",
+       "topic.prefix": "pix-service",
+       "database.hostname": "localhost",
+       "database.port": "5432",
+       "database.user": "postgres",
+       "database.password": "********",
+       "database.dbname": "postgres",
+       "plugin.name": "decoderbufs",
+       "slot.name":"pix_service",
+       "database.sslmode": "disable",
+       "table. include.list": "public.pix"
+      }
+    }
+    Copiar código
+    Podemos clicar no botão "Launch".
+
+    O connector foi criado.
+
+    Connector name	Status	Category	Plugin name	Topics	Number of Tasks
+    PostgresConnectorConnector_0	Running	Source	PostgresConnector...	--	--
+    De volta ao Postman, vamos criar alguns pix e ele vai pegar no Kafka Connect diretamente do banco de dados.
+
+    Vamos chamar a seguinte rota POST três vezes.
+
+    POST http://localhost:8080/pix
+
+    {
+      "chaveOrigem": "456",
+      "chaveDestino": "456",
+      "valor": "5000"
+    }
+    Copiar código
+    Agora, voltando ao Confluent clicaremos no menu "Topics".
+
+    Topic name	Status	Partitions	Production	...
+    default_ksql_processing_log	Healthy	1	--
+    pix_topic	Healthy	1	--
+    pix-service.public.pix	Fetching data..	1	--
+    Já foi criado um tópico novo chamado pix-service.public.pix. Ele uniu aquele prefixo que configuramos e o nome da tabela.
+
+    Algo interessante é que já podemos testar para verificar se está tudo funcionando.
+
+    Vamos clicar no menu "Topics". Selecionar o tópico "pix-service.public.pix" e clicar na aba "Messages".
+
+    Ele já funciona como um consumidor de testes. Se mandarmos algumas mensagens no Postman, elas vão aparecer em "Messages" no formato JSON com as informações que mandamos, como chave_destino, chave_origem, data_transferencia.
+
+    Agora o Kafka Connect está indo diretamente no banco de dados, pegando os dados que adicionamos e mandando para o tópico da aplicação. Também é bom que não tivemos que implementar nada referente ao Kafka lá no produtor. Agora a aplicação do produtor nem sabe mais o que é o Kafka.
+
+
+
+
+------------------------------------------Usando o Kafka Connect
+AGORA PROXIMO PASSO CONFIGURA E ALTERA CONSUMIDOR
+PRIMARA COISA QUE VAMOS FAZER PEGAR NOME DO TOPIC QUE NOS ACABAMOS DE CRIAR PIX-SERVICE.PUBLIC.PIX
+
+NA CLASS DE CONSUMIDO PIXVALIDATOR VAMOS ALTERA O NOME DO TOPIC QUE RECEBEMOS
+    @KafkaListener(topics = "pix-service.public.pix", groupId = "grupo")
+
+EM SEGUIDA VAMOS MUDAR DTO POR QUE VAMOS FAZER ISSO
+  private Integer id;
+  private String identifier;
+  @JsonProperty("chave_origem")
+  private String chaveOrigem;
+  @JsonProperty("chave_destino")
+  private String chaveDestino;
+  private Double valor;
+  @JsonProperty("data_transferencia")
+  private Date dataTransferencia;
+  private PixStatus status;
+
+  PARA QUE SE CONVERTA OS DADOS CERTINHO POR QUE ALGUNS NOME MUDA O NOME NA HORA DE MANDAR
+  PARA RECEBER ELE PRECISA RECONHECER NOME
+
+
+--------------AS CONFIG CONTINUA MESMA
+OS PRINCIPAIS QUE ELE PRECISA SÃO ESSES
+    props.put(
+                ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
+                StringDeserializer.class);
+        props.put(
+                "schema.registry.url",
+                "http://localhost:8081");
+        props.put(
+                ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
+                KafkaAvroDeserializer.class);
+ -------------------------------CONFIGURA PIXVALIDATOR
+ POR QUE VAMOS CONFIGURA VAMOS CONFIGURA FORAMA QUE ELE RECEBE OS DADOS POR QUE NÃO FORMA TÃO SIMPLES QUE ELE VAI
+ RECEBER ESSES DADOS VAI SER DE UM METODO DELES
+
+     public void processaPix(GenericData .Record pixDTO, Acknowledgment acknowledgment) -> aqui metodos que recebe
+
+
+
+
+     pixDTO.get("after");-> aqui que ele vai  pegar informação do pix os dados
+
+
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.findAndRegisterModules();
+
+        PixDTO pixDTO = objectMapper.readValue(data.get("after").toString(), PixDTO.class);
+
+        AQUI FAZ CONVERSÃO DE JSON PARA RECORD PARA NOS PODEMOS ULTIZAR INFOS DE FORMA MAIS FACIL
+
+
+    @KafkaListener(topics = "pix-service.public.pix", groupId = "grupo")
+    @RetryableTopic(
+            backoff = @Backoff(value = 3000L),
+            attempts = "4",
+            autoCreateTopics = "true",
+            include = KeyNotFoundException.class
+
+    )
+    public void processaPix(GenericData .Record data, Acknowledgment acknowledgment) throws JsonProcessingException {
+        acknowledgment.acknowledge();
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.findAndRegisterModules();
+
+        PixDTO pixDTO = objectMapper.readValue(data.get("after").toString(), PixDTO.class);
+        if (pixDTO.getStatus().equals(PixStatus.EM_PROCESSAMENTO)){
+            Pix pix = pixRepository.findByIdentifier(pixDTO.getIdentifier());
+
+            Key origem = keyRepository.findByChave(pixDTO.getChaveOrigem());
+            Key destino = keyRepository.findByChave(pixDTO.getChaveDestino());
+
+            if (origem == null || destino == null) {
+                pix.setStatus (PixStatus.ERRO);
+            } else {
+                pix.setStatus (PixStatus.PROCESSADO);
+            }
+            pixRepository.save(pix);
+        }
+    }
+    NO FINAL CLASS FICA ASSIM ESSE IF PARA NÃO FICAR ENVIANDO MENSAGEN INFINITA
+    POR QUE SEMPRE QUE ALTERA A MENSAGEM O KAFKA REENVIA A MENSAGEM ISSO EVITA QUE FIQUE NESSE LOOP
+    COM ESSE IF POR QUE MENSAGEM JA FOI PROCESSADA NOS NÃO QUEREMOS QUE ELA SEJA PROCESSA NOVAMENTE
+
+
+
+
+
